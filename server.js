@@ -6,8 +6,7 @@ const bodyParser = require("body-parser");
 
 const app = express();
 const PORT = 8080;
-// const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://ollama:11434";
-const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
+const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://ollama:11434";
 
 // Middleware
 app.use(bodyParser.json());
@@ -57,10 +56,84 @@ app.get("/samples", (req, res) => {
 
 app.get("/status", async (req, res) => {
 	try {
-		await axios.get(`${OLLAMA_HOST}/api/tags`, { timeout: 2000 });
-		res.json({ ollama_available: true, terms_loaded: bannedTerms.length });
+		const response = await axios.get(`${OLLAMA_HOST}/api/tags`, {
+			timeout: 5000,
+		});
+		const models = response.data.models || [];
+		const modelReady = models.some(
+			(m) => m.name && m.name.includes("llama3.2"),
+		);
+
+		res.json({
+			llm_ready: modelReady,
+			llm_downloading: !modelReady,
+			terms_loaded: bannedTerms.length,
+		});
 	} catch (e) {
-		res.json({ ollama_available: false, terms_loaded: bannedTerms.length });
+		res.json({
+			llm_ready: false,
+			llm_downloading: false,
+			terms_loaded: bannedTerms.length,
+		});
+	}
+});
+
+// Pull model with progress streaming (SSE)
+app.get("/pull-model", async (req, res) => {
+	res.setHeader("Content-Type", "text/event-stream");
+	res.setHeader("Cache-Control", "no-cache");
+	res.setHeader("Connection", "keep-alive");
+
+	try {
+		const response = await axios({
+			method: "post",
+			url: `${OLLAMA_HOST}/api/pull`,
+			data: { name: "llama3.2", stream: true },
+			responseType: "stream",
+		});
+
+		response.data.on("data", (chunk) => {
+			try {
+				const lines = chunk
+					.toString()
+					.split("\n")
+					.filter((l) => l.trim());
+				for (const line of lines) {
+					const data = JSON.parse(line);
+					let progress = 0;
+					let status = data.status || "";
+
+					if (data.completed && data.total) {
+						progress = Math.round((data.completed / data.total) * 100);
+					}
+
+					res.write(
+						`data: ${JSON.stringify({ status, progress, done: false })}\n\n`,
+					);
+				}
+			} catch (e) {
+				// Ignore parse errors
+			}
+		});
+
+		response.data.on("end", () => {
+			res.write(
+				`data: ${JSON.stringify({ status: "Complete", progress: 100, done: true })}\n\n`,
+			);
+			res.end();
+		});
+
+		response.data.on("error", (err) => {
+			res.write(
+				`data: ${JSON.stringify({ status: "Error", error: err.message, done: true })}\n\n`,
+			);
+			res.end();
+		});
+	} catch (e) {
+		res.write(
+			`data: ${JSON.stringify({ status: "Error", error: e.message, done: true })}\n\n`,
+		);
+		res.end();
 	}
 });
 

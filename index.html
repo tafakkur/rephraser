@@ -105,6 +105,32 @@
 			</div>
 		</div>
 
+		<!-- Download Modal -->
+		<div id="downloadModal" class="modal download-modal">
+			<div class="modal-content" style="max-width: 400px; text-align: center">
+				<div class="modal-body" style="padding: 40px 30px">
+					<div class="download-spinner"></div>
+					<h3 style="margin: 20px 0 10px">LLM Model Downloading</h3>
+					<p
+						id="downloadStatus"
+						style="color: #666; font-size: 14px; line-height: 1.6"
+					>
+						Please wait while the AI model downloads.<br />
+						This may take a few minutes on first run.
+					</p>
+					<div class="progress-container">
+						<div class="progress-bar" id="downloadProgress"></div>
+					</div>
+					<p
+						id="downloadPercent"
+						style="color: #2196f3; font-weight: 600; margin-top: 10px"
+					>
+						0%
+					</p>
+				</div>
+			</div>
+		</div>
+
 		<script>
 			// Clear text box on page load
 			document.getElementById("inputText").value = "";
@@ -226,26 +252,71 @@
 			};
 
 			// Check status
+			let modelDownloading = false;
 			async function checkStatus() {
 				try {
 					const res = await fetch("/status");
 					const data = await res.json();
 					const div = document.getElementById("systemStatus");
-					if (data.ollama_available) {
+					const downloadModal = document.getElementById("downloadModal");
+
+					if (data.llm_ready) {
 						div.className = "status success";
 						div.innerHTML = "✅ System Online | AI Model Ready";
+						if (downloadModal) downloadModal.style.display = "none";
+						modelDownloading = false;
+					} else if (data.llm_downloading) {
+						div.className = "status";
+						div.innerHTML = "⏳ LLM Model Downloading...";
+						if (downloadModal && !modelDownloading) {
+							downloadModal.style.display = "flex";
+							modelDownloading = true;
+							startModelDownload();
+						}
 					} else {
 						div.className = "status error";
-						div.innerHTML =
-							"⚠️ AI Service Offline (Using Phrase Filter backup)";
-						document.querySelector('input[value="simple"]').checked = true;
+						div.innerHTML = "⚠️ AI Service Offline";
+						if (downloadModal) downloadModal.style.display = "none";
 					}
 				} catch (e) {
 					console.error(e);
 				}
 			}
 			checkStatus();
-			setInterval(checkStatus, 30000);
+			setInterval(checkStatus, 5000);
+
+			// Start model download with progress
+			function startModelDownload() {
+				const eventSource = new EventSource("/pull-model");
+				const progressBar = document.getElementById("downloadProgress");
+				const percentText = document.getElementById("downloadPercent");
+				const statusText = document.getElementById("downloadStatus");
+
+				eventSource.onmessage = (event) => {
+					try {
+						const data = JSON.parse(event.data);
+						if (data.progress > 0) {
+							progressBar.style.width = data.progress + "%";
+							percentText.textContent = data.progress + "%";
+						}
+						if (data.status) {
+							statusText.textContent = data.status;
+						}
+						if (data.done) {
+							eventSource.close();
+							if (data.progress === 100) {
+								checkStatus();
+							}
+						}
+					} catch (e) {
+						console.error("Parse error:", e);
+					}
+				};
+
+				eventSource.onerror = () => {
+					eventSource.close();
+				};
+			}
 
 			document.getElementById("moderateForm").onsubmit = async (e) => {
 				e.preventDefault();

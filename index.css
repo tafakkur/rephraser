@@ -349,3 +349,29 @@ button:disabled {
 .btn-secondary:hover {
 	background: #eee;
 }
+
+/* Download Modal */
+.download-spinner {
+	width: 50px;
+	height: 50px;
+	margin: 0 auto;
+	border: 4px solid #e0e0e0;
+	border-top-color: #2196f3;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+.progress-container {
+	width: 100%;
+	height: 8px;
+	background: #e0e0e0;
+	border-radius: 4px;
+	margin-top: 20px;
+	overflow: hidden;
+}
+.progress-bar {
+	height: 100%;
+	width: 0%;
+	background: linear-gradient(90deg, #2196f3, #21cbf3);
+	border-radius: 4px;
+	transition: width 0.3s ease;
+}
