@@ -1,7 +1,6 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const csv = require("csv-parse");
 const axios = require("axios");
 const bodyParser = require("body-parser");
 
@@ -12,31 +11,29 @@ const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 
 // Middleware
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, "public"))); // Serve static files if needed
+app.use(bodyParser.text({ type: "text/plain", limit: "1mb" }));
+app.use(express.static(path.join(__dirname, "public")));
 
 // Data Loading
 let bannedTerms = [];
 
 function loadBannedTerms() {
-	const parser = fs
-		.createReadStream(path.join(__dirname, "banned_terms.csv"))
-		.pipe(csv.parse({ columns: true, trim: true }));
-
-	const terms = [];
-	parser.on("readable", function () {
-		let record;
-		while ((record = parser.read()) !== null) {
-			if (record.term) {
-				terms.push(record.term.toLowerCase());
-			}
-		}
-	});
-
-	parser.on("end", function () {
+	try {
+		const content = fs.readFileSync(
+			path.join(__dirname, "banned_terms.txt"),
+			"utf-8",
+		);
+		const terms = content
+			.split("\n")
+			.map((line) => line.trim().toLowerCase())
+			.filter((line) => line.length > 0);
 		// Sort by length (descending) to prioritize longer phrases
 		bannedTerms = terms.sort((a, b) => b.length - a.length);
 		console.log(`Loaded ${bannedTerms.length} banned terms`);
-	});
+	} catch (err) {
+		console.error("Error loading banned terms:", err.message);
+		bannedTerms = [];
+	}
 }
 
 loadBannedTerms();
@@ -64,6 +61,30 @@ app.get("/status", async (req, res) => {
 		res.json({ ollama_available: true, terms_loaded: bannedTerms.length });
 	} catch (e) {
 		res.json({ ollama_available: false, terms_loaded: bannedTerms.length });
+	}
+});
+
+// Get current banned terms
+app.get("/banned-terms", (req, res) => {
+	res.json({ terms: bannedTerms, count: bannedTerms.length });
+});
+
+// Upload custom banned terms
+app.post("/banned-terms", (req, res) => {
+	try {
+		const content = req.body;
+		if (typeof content !== "string") {
+			return res.status(400).json({ error: "Expected plain text" });
+		}
+		const terms = content
+			.split("\n")
+			.map((line) => line.trim().toLowerCase())
+			.filter((line) => line.length > 0);
+		bannedTerms = terms.sort((a, b) => b.length - a.length);
+		console.log(`Updated banned terms: ${bannedTerms.length} terms`);
+		res.json({ success: true, count: bannedTerms.length });
+	} catch (err) {
+		res.status(500).json({ error: err.message });
 	}
 });
 

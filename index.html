@@ -48,6 +48,31 @@
 				</div>
 
 				<div class="sidebar">
+					<div class="control-panel">
+						<h3>Banned Terms</h3>
+						<p style="font-size: 13px; color: #666; margin-bottom: 10px">
+							<span id="termsCount">Loading...</span>
+							<a href="#" id="viewTermsLink" style="margin-left: 8px"
+								>View/Edit</a
+							>
+						</p>
+						<div class="file-upload-area">
+							<label for="termsFileInput" class="file-label">
+								📄 Upload custom terms (.txt)
+							</label>
+							<input
+								type="file"
+								id="termsFileInput"
+								accept=".txt"
+								style="display: none"
+							/>
+							<span id="termsFileName" class="file-name"></span>
+							<div style="font-size: 11px; color: #999; margin-top: 5px">
+								One term per line
+							</div>
+						</div>
+					</div>
+
 					<div class="samples-area">
 						<h3>Sample Inputs</h3>
 						<div id="sampleButtons"></div>
@@ -56,7 +81,34 @@
 			</div>
 		</div>
 
+		<!-- Banned Terms Modal -->
+		<div id="termsModal" class="modal">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h3>Banned Terms</h3>
+					<span class="modal-close">&times;</span>
+				</div>
+				<div class="modal-body">
+					<p style="font-size: 13px; color: #666; margin-bottom: 10px">
+						One term per line. Changes are applied immediately.
+					</p>
+					<textarea
+						id="termsEditor"
+						rows="15"
+						placeholder="Enter banned terms, one per line..."
+					></textarea>
+				</div>
+				<div class="modal-footer">
+					<button id="saveTermsBtn" class="btn-primary">Save Changes</button>
+					<button id="cancelTermsBtn" class="btn-secondary">Cancel</button>
+				</div>
+			</div>
+		</div>
+
 		<script>
+			// Clear text box on page load
+			document.getElementById("inputText").value = "";
+
 			// Load samples
 			fetch("/samples")
 				.then((r) => r.json())
@@ -73,7 +125,7 @@
 					});
 				});
 
-			// File upload handler
+			// File upload handler for input text
 			document.getElementById("fileInput").addEventListener("change", (e) => {
 				const file = e.target.files[0];
 				if (file) {
@@ -85,6 +137,93 @@
 					reader.readAsText(file);
 				}
 			});
+
+			// Banned terms file upload handler
+			document
+				.getElementById("termsFileInput")
+				.addEventListener("change", async (e) => {
+					const file = e.target.files[0];
+					if (file) {
+						document.getElementById("termsFileName").textContent =
+							"Uploading...";
+						const reader = new FileReader();
+						reader.onload = async (event) => {
+							try {
+								const res = await fetch("/banned-terms", {
+									method: "POST",
+									headers: { "Content-Type": "text/plain" },
+									body: event.target.result,
+								});
+								const data = await res.json();
+								if (data.success) {
+									document.getElementById("termsFileName").textContent =
+										`✓ ${file.name}`;
+									document.getElementById("termsCount").textContent =
+										`${data.count} terms loaded`;
+								} else {
+									document.getElementById("termsFileName").textContent =
+										"Error uploading";
+								}
+							} catch (err) {
+								document.getElementById("termsFileName").textContent =
+									"Upload failed";
+							}
+						};
+						reader.readAsText(file);
+					}
+				});
+
+			// Load initial terms count
+			fetch("/banned-terms")
+				.then((r) => r.json())
+				.then((data) => {
+					document.getElementById("termsCount").textContent =
+						`${data.count} terms loaded`;
+				});
+
+			// Modal functionality
+			const modal = document.getElementById("termsModal");
+			const viewLink = document.getElementById("viewTermsLink");
+			const closeBtn = document.querySelector(".modal-close");
+			const saveBtn = document.getElementById("saveTermsBtn");
+			const cancelBtn = document.getElementById("cancelTermsBtn");
+			const termsEditor = document.getElementById("termsEditor");
+
+			viewLink.onclick = async (e) => {
+				e.preventDefault();
+				const res = await fetch("/banned-terms");
+				const data = await res.json();
+				termsEditor.value = data.terms.join("\n");
+				modal.style.display = "flex";
+			};
+
+			closeBtn.onclick = () => (modal.style.display = "none");
+			cancelBtn.onclick = () => (modal.style.display = "none");
+			modal.onclick = (e) => {
+				if (e.target === modal) modal.style.display = "none";
+			};
+
+			saveBtn.onclick = async () => {
+				saveBtn.textContent = "Saving...";
+				saveBtn.disabled = true;
+				try {
+					const res = await fetch("/banned-terms", {
+						method: "POST",
+						headers: { "Content-Type": "text/plain" },
+						body: termsEditor.value,
+					});
+					const data = await res.json();
+					if (data.success) {
+						document.getElementById("termsCount").textContent =
+							`${data.count} terms loaded`;
+						modal.style.display = "none";
+					}
+				} catch (err) {
+					alert("Failed to save terms");
+				}
+				saveBtn.textContent = "Save Changes";
+				saveBtn.disabled = false;
+			};
 
 			// Check status
 			async function checkStatus() {

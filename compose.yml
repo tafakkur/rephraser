@@ -16,7 +16,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./banned_terms.csv:/app/banned_terms.csv
+      - ./banned_terms.txt:/app/banned_terms.txt
       - ./samples.json:/app/samples.json
       - ./index.html:/app/index.html
       - ./index.css:/app/index.css
