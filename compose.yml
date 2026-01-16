@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: text_moderator_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - .ollama:/root/.ollama
+    restart: unless-stopped
+
+  moderator_app:
+    build: .
+    container_name: text_moderator_app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./banned_terms.csv:/app/banned_terms.csv
+      - ./samples.json:/app/samples.json
+      - ./index.html:/app/index.html
+      - ./index.css:/app/index.css
+      - ./reports:/app/reports
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      - ollama
+    restart: unless-stopped

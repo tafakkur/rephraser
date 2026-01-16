@@ -1,0 +1,188 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Text Moderator</title>
+		<link rel="stylesheet" href="index.css" />
+	</head>
+	<body>
+		<div class="container">
+			<h1>Text Moderator</h1>
+			<p class="header-desc">
+				AI-powered assistant to sanitize text and remove offensive language.
+			</p>
+
+			<div class="grid">
+				<div class="main-content">
+					<div id="systemStatus" class="status">Connecting to system...</div>
+
+					<form id="moderateForm">
+						<label style="font-weight: 600; display: block; margin-bottom: 10px"
+							>Enter Message to Moderate:</label
+						>
+						<textarea
+							id="inputText"
+							rows="8"
+							placeholder="Type or paste customer message here..."
+						></textarea>
+
+						<div class="file-upload-area">
+							<label for="fileInput" class="file-label">
+								📁 Or upload a .txt file
+							</label>
+							<input
+								type="file"
+								id="fileInput"
+								accept=".txt"
+								style="display: none"
+							/>
+							<span id="fileName" class="file-name"></span>
+						</div>
+
+						<button type="submit" id="submitBtn">
+							<span class="loading-spinner" id="spinner"></span>
+							Moderate Text
+						</button>
+					</form>
+
+					<div id="resultArea"></div>
+				</div>
+
+				<div class="sidebar">
+					<div class="samples-area">
+						<h3>Sample Inputs</h3>
+						<div id="sampleButtons"></div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+			// Load samples
+			fetch("/samples")
+				.then((r) => r.json())
+				.then((samples) => {
+					const container = document.getElementById("sampleButtons");
+					samples.forEach((text) => {
+						const btn = document.createElement("button");
+						btn.className = "sample-btn";
+						btn.textContent =
+							text.length > 50 ? text.substring(0, 47) + "..." : text;
+						btn.onclick = () =>
+							(document.getElementById("inputText").value = text);
+						container.appendChild(btn);
+					});
+				});
+
+			// File upload handler
+			document.getElementById("fileInput").addEventListener("change", (e) => {
+				const file = e.target.files[0];
+				if (file) {
+					document.getElementById("fileName").textContent = file.name;
+					const reader = new FileReader();
+					reader.onload = (event) => {
+						document.getElementById("inputText").value = event.target.result;
+					};
+					reader.readAsText(file);
+				}
+			});
+
+			// Check status
+			async function checkStatus() {
+				try {
+					const res = await fetch("/status");
+					const data = await res.json();
+					const div = document.getElementById("systemStatus");
+					if (data.ollama_available) {
+						div.className = "status success";
+						div.innerHTML = "✅ System Online | AI Model Ready";
+					} else {
+						div.className = "status error";
+						div.innerHTML =
+							"⚠️ AI Service Offline (Using Phrase Filter backup)";
+						document.querySelector('input[value="simple"]').checked = true;
+					}
+				} catch (e) {
+					console.error(e);
+				}
+			}
+			checkStatus();
+			setInterval(checkStatus, 30000);
+
+			document.getElementById("moderateForm").onsubmit = async (e) => {
+				e.preventDefault();
+				const text = document.getElementById("inputText").value;
+
+				if (!text.trim()) return alert("Please enter some text");
+
+				const btn = document.getElementById("submitBtn");
+				const spinner = document.getElementById("spinner");
+				const resultArea = document.getElementById("resultArea");
+
+				btn.disabled = true;
+				spinner.style.display = "inline-block";
+				resultArea.innerHTML = "";
+
+				try {
+					const res = await fetch("/moderate", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ text }),
+					});
+
+					const data = await res.json();
+
+					let resultHtml = "";
+
+					if (data.changes && data.changes.length > 0) {
+						resultHtml = `
+							<div class="result-box visible">
+								<h2 style="color: #2e7d32; margin-top: 0;">Moderation Complete</h2>
+								<p style="color: #666;">Found ${data.changes.length} sentence(s) with offensive content. Each has been rewritten by AI.</p>
+								<table class="results-table">
+									<thead>
+										<tr>
+											<th>Sn</th>
+											<th>Line #</th>
+											<th>Original Text</th>
+											<th>Revised Text</th>
+										</tr>
+									</thead>
+									<tbody>
+										${data.changes
+											.map(
+												(c, i) => `
+											<tr>
+												<td>${i + 1}</td>
+												<td>${c.lineNumber}</td>
+												<td>${c.originalHighlighted}</td>
+												<td>${c.revised}</td>
+											</tr>
+										`,
+											)
+											.join("")}
+									</tbody>
+								</table>
+							</div>
+						`;
+					} else {
+						resultHtml = `
+							<div class="result-box visible">
+								<h2 style="color: #2e7d32; margin-top: 0;">✅ No Issues Found</h2>
+								<p style="color: #666;">No offensive terms were detected in the text.</p>
+							</div>
+						`;
+					}
+
+					resultArea.innerHTML = resultHtml;
+				} catch (err) {
+					resultArea.innerHTML =
+						'<div class="status error">Error processing request</div>';
+					console.error(err);
+				} finally {
+					btn.disabled = false;
+					spinner.style.display = "none";
+				}
+			};
+		</script>
+	</body>
+</html>
