@@ -8,7 +8,6 @@ RUN npm install
 COPY server.js .
 COPY index.html .
 COPY index.css .
-COPY offensive_words.csv .
 
 EXPOSE 8080
 
