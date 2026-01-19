@@ -107,8 +107,39 @@
 
 		<!-- Download Modal -->
 		<div id="downloadModal" class="modal download-modal">
-			<div class="modal-content" style="max-width: 400px; text-align: center">
-				<div class="modal-body" style="padding: 40px 30px">
+			<div class="modal-content" style="max-width: 420px; text-align: center">
+				<!-- Confirmation View -->
+				<div id="downloadConfirm" class="modal-body" style="padding: 30px">
+					<h3 style="margin: 0 0 15px">LLM Model Not Found</h3>
+					<p style="color: #666; font-size: 14px; line-height: 1.6">
+						The AI rewriting model is not installed. Would you like to download
+						it now?<br /><br />
+						<strong style="color: #e65100"
+							>⚠️ This is a large download (~2GB)</strong
+						>
+					</p>
+					<div
+						style="
+							margin-top: 25px;
+							display: flex;
+							gap: 10px;
+							justify-content: center;
+						"
+					>
+						<button id="downloadYesBtn" class="btn-primary">
+							Download Model
+						</button>
+						<button id="downloadSkipBtn" class="btn-secondary">
+							Skip for Now
+						</button>
+					</div>
+				</div>
+				<!-- Progress View -->
+				<div
+					id="downloadProgressView"
+					class="modal-body"
+					style="padding: 40px 30px; display: none"
+				>
 					<div class="download-spinner"></div>
 					<h3 style="margin: 20px 0 10px">LLM Model Downloading</h3>
 					<p
@@ -116,7 +147,7 @@
 						style="color: #666; font-size: 14px; line-height: 1.6"
 					>
 						Please wait while the AI model downloads.<br />
-						This may take a few minutes on first run.
+						This may take a few minutes.
 					</p>
 					<div class="progress-container">
 						<div class="progress-bar" id="downloadProgress"></div>
@@ -253,6 +284,9 @@
 
 			// Check status
 			let modelDownloading = false;
+			let userSkippedDownload = false;
+			let promptedForDownload = false;
+
 			async function checkStatus() {
 				try {
 					const res = await fetch("/status");
@@ -265,18 +299,28 @@
 						div.innerHTML = "✅ System Online | AI Model Ready";
 						if (downloadModal) downloadModal.style.display = "none";
 						modelDownloading = false;
-					} else if (data.llm_downloading) {
+					} else if (userSkippedDownload) {
+						div.className = "status";
+						div.innerHTML =
+							"⚠️ AI Model Not Loaded | Phrases will be marked only";
+					} else if (modelDownloading) {
 						div.className = "status";
 						div.innerHTML = "⏳ LLM Model Downloading...";
-						if (downloadModal && !modelDownloading) {
+					} else if (!promptedForDownload && data.llm_downloading) {
+						// Show confirmation dialog
+						div.className = "status";
+						div.innerHTML = "⚠️ AI Model Not Found";
+						promptedForDownload = true;
+						if (downloadModal) {
 							downloadModal.style.display = "flex";
-							modelDownloading = true;
-							startModelDownload();
+							document.getElementById("downloadConfirm").style.display =
+								"block";
+							document.getElementById("downloadProgressView").style.display =
+								"none";
 						}
-					} else {
+					} else if (!data.llm_downloading) {
 						div.className = "status error";
 						div.innerHTML = "⚠️ AI Service Offline";
-						if (downloadModal) downloadModal.style.display = "none";
 					}
 				} catch (e) {
 					console.error(e);
@@ -284,6 +328,22 @@
 			}
 			checkStatus();
 			setInterval(checkStatus, 5000);
+
+			// Download confirmation buttons
+			document.getElementById("downloadYesBtn").onclick = () => {
+				document.getElementById("downloadConfirm").style.display = "none";
+				document.getElementById("downloadProgressView").style.display = "block";
+				modelDownloading = true;
+				startModelDownload();
+			};
+
+			document.getElementById("downloadSkipBtn").onclick = () => {
+				document.getElementById("downloadModal").style.display = "none";
+				userSkippedDownload = true;
+				document.getElementById("systemStatus").className = "status";
+				document.getElementById("systemStatus").innerHTML =
+					"⚠️ AI Model Not Loaded | Phrases will be marked only";
+			};
 
 			// Start model download with progress
 			function startModelDownload() {

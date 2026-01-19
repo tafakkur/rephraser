@@ -162,7 +162,7 @@ app.post("/banned-terms", (req, res) => {
 });
 
 app.post("/moderate", async (req, res) => {
-	const { text } = req.body;
+	const { text, skipLlm } = req.body;
 
 	if (!text) return res.status(400).json({ error: "No text provided" });
 
@@ -181,21 +181,32 @@ app.post("/moderate", async (req, res) => {
 				checkSentenceForBannedTerms(sentence);
 
 			if (hasBannedTerms) {
-				// Call LLM to rephrase this specific sentence
 				let revised = sentence;
-				try {
-					const response = await axios.post(`${OLLAMA_HOST}/api/generate`, {
-						model: "llama3.2",
-						prompt: `Rewrite this sentence to be professional and polite, removing offensive language while keeping the original intent. Return ONLY the rewritten sentence, nothing else.
+
+				// Only call LLM if not skipped
+				if (!skipLlm) {
+					try {
+						const response = await axios.post(`${OLLAMA_HOST}/api/generate`, {
+							model: "llama3.2",
+							prompt: `Rewrite this sentence to be professional and polite, removing offensive language while keeping the original intent. Return ONLY the rewritten sentence, nothing else.
 Sentence: "${sentence}"`,
-						stream: false,
-						options: { temperature: 0.3, num_predict: 200 },
-					});
-					revised = response.data.response.trim();
-				} catch (llmError) {
-					console.error("LLM error for sentence:", llmError.message);
-					// Fallback: just mask the terms
-					revised = sentence;
+							stream: false,
+							options: { temperature: 0.3, num_predict: 200 },
+						});
+						revised = response.data.response.trim();
+					} catch (llmError) {
+						console.error("LLM error for sentence:", llmError.message);
+						// Fallback: just mask the terms
+						terms.forEach((term) => {
+							const regex = new RegExp(
+								`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+								"gi",
+							);
+							revised = revised.replace(regex, "[MODERATED]");
+						});
+					}
+				} else {
+					// Skip LLM mode - just mask the terms
 					terms.forEach((term) => {
 						const regex = new RegExp(
 							`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
