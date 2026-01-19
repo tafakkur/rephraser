@@ -19,7 +19,7 @@ let bannedTerms = [];
 function loadBannedTerms() {
 	try {
 		const content = fs.readFileSync(
-			path.join(__dirname, "banned_terms.txt"),
+			path.join(__dirname, "terms_for_moderation.txt"),
 			"utf-8",
 		);
 		const terms = content

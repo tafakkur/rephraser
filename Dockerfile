@@ -8,7 +8,7 @@ RUN npm install
 COPY server.js .
 COPY index.html .
 COPY index.css .
-COPY banned_terms.txt .
+COPY terms_for_moderation.txt .
 COPY samples.json .
 
 EXPOSE 8080

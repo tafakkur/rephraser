@@ -130,7 +130,7 @@ docker compose down
 
 **Option 1: Edit the file directly**
 
-Edit `banned_terms.txt` (one term per line):
+Edit `terms_for_moderation.txt` (one term per line):
 
 ```
 your_word_here
